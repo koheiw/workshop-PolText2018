@@ -23,3 +23,7 @@ article > pre {
     left: 0 !important;
     padding: 10px 0 10px 20px
 }
+
+slide.title-slide h1{
+    width: 900px;
+}
