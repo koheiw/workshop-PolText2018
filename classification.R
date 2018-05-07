@@ -21,29 +21,6 @@ l <- i %in% sample(i, 1500)
 mt_train <- mt[l,] 
 mt_test <- mt[!l,]
 
-# -----------------------------
-
-ws <- dfm_select(mt_train, feat) %>% 
-      textmodel_wordscores(as.numeric(docvars(mt_train, "manual")))
-data$ws <- NA
-data$ws[!l] <- predict(ws, newdata = mt_test)
-
-plot(data$manual, data$ws)
-t.test(ws ~ manual, data)
-
-# ----------------------------
-
-nb <- dfm_select(mt_train, feat) %>% 
-    textmodel_nb(docvars(mt_train, "manual"))
-
-data$nb <- NA
-#data$nb[!l] <- predict(nb, newdata = mt_test) # should like this
-data$nb[!l] <- predict(nb, newdata = dfm_select(mt_test, mt_train))$nb.predicted # should like this
-
-tb_nb <- table(data$manual, data$nb, dnn = c("manual", "nb"))
-tb_nb
-mosaicplot(tb_nb)
-
 accuracy <- function (x) {
     list(neg_recall =  x[1,1] / sum(x[1,]),
          neg_precision = x[1,1] / sum(x[,1]),
@@ -52,6 +29,18 @@ accuracy <- function (x) {
     )
 }
 
+# ------------------------------
+
+nb <- dfm_select(mt_train, feat) %>% 
+    textmodel_nb(docvars(mt_train, "manual"))
+
+data$nb <- NA
+#data$nb[!l] <- predict(nb, newdata = mt_test) # should like this
+data$nb[!l] <- predict(nb, newdata = dfm_select(mt_test, mt_train))$nb.predicted
+
+tb_nb <- table(data$manual, data$nb, dnn = c("manual", "nb"))
+tb_nb
+mosaicplot(tb_nb)
 accuracy(tb_nb)
 
 
@@ -69,6 +58,20 @@ tb_rf
 mosaicplot(tb_rf)
 accuracy(tb_rf)
 
+# -----------------------------
+
+ws <- dfm_select(mt_train, feat) %>% 
+    textmodel_wordscores(as.numeric(docvars(mt_train, "manual")))
+
+data$ws <- NA
+data$ws[!l] <- predict(ws, newdata = mt_test)
+
+plot(data$manual, data$ws)
+t.test(ws ~ manual, data)
+
+# ----------------------------
+
+
 ## Unsupervided and semi-supervided -------------------
 
 wf <- dfm_select(mt, feat) %>% textmodel_wordfish()
@@ -85,11 +88,17 @@ tail(coef(wf, "features")[,"beta"], 30)
 # ---------------------------
 
 require(LSS)
-lss <- textmodel_lss(mt_sent, seedwords("pos-neg"), feat, cache = TRUE)
+#feat2 <- feat <- names(topfeatures(mt, 5000))
+lss <- textmodel_lss(mt_sent, seedwords("pos-neg"), feat, cache = TRUE, k = 200)
+#lss$beta <- lss$beta[lss$beta < quantile(lss$beta, p) | quantile(lss$beta, 1 - p) < lss$beta]
+#lss$beta <- (lss$beta ** 2) * sign(lss$beta)
 
+length(lss$beta)
+#data$lss <- predict(lss, newdata = t(t(mt) / docfreq(mt)))
 data$lss <- predict(lss, newdata = mt)
+#data$lss <- predict(lss, newdata = mt, weight_scheme = "boolean")
 
-table(data$manual, data$lss > 0)
+accuracy(table(data$manual, data$lss > 0))
 
 plot(data$manual, data$lss)
 t.test(lss ~ manual, data)
@@ -131,6 +140,15 @@ par(mfrow = c(1, 1))
 sort(docfreq(mt)[feat], decreasing = TRUE) %>% 
     plot(type = "b", ylab = "Document frequency of features")
 
-docfreq(mt)[tail(feat, 1)] # need to see five times 
+feat_rare <- tail(feat, 10)
+feat_rare
+docfreq(mt_train2)[feat_rare] * (500 /  ndoc(mt_train2))
+
+
+plot(head(sort(docfreq(mt_train2), decreasing = TRUE), 1000), type = "l",
+     ylab = "Docuent frequency of features", 
+     xlab = "Feature ranks")
+
 
 sparsity(dfm(corp, remove_punct = TRUE)) # this is a dense corpus 
+
