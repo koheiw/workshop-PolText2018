@@ -4,8 +4,8 @@ author: "Kohei Watanabe (LSE, Waseda)"
 date: "9 May 2018"
 output: 
     ioslides_presentation:
-        css: images/ioslides_styles.css
-        logo: images/quanteda-logo.png
+        css: "images/ioslides_styles.css"
+        logo: "images/quanteda-logo.png"
         widescreen: true
         toc: true
 ---
@@ -13,11 +13,21 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
 	echo = TRUE,
+	message = FALSE,
 	warning = FALSE,
 	cache = TRUE
 )
 require(quanteda)
 ```
+
+## Structure of the workshop
+
+1. Brief introduction (10 min)
+2. How to perform basic operations using Quanteda (50 min)
+3. How to use machine learning models (30-45 min)
+    - Overview of supervised and unsupervised models
+    - Experiment with different training sets
+4. Questions and answers (30-15 min)
 
 # Introduction
 
@@ -25,7 +35,8 @@ require(quanteda)
 
 **quanteda** is an R package for quantitative text analysis developed by a team based at the LSE.
 
-- After 5 years of development, we released version 1.0 at London R meeting in January
+- After 5 years of development, version 1.0 was released at London R meeting in January
+- Developed for high *consistency* (Ken) and *performance* (Kohei)
 - Used by leading political scientists in North America, Europe and Asia
 - It is a stand-alone tool, but can be used to develop packages (e.g. **politeness**, **preText**, **phrasemachine**, **tidytext**, **stm**.
 - Quanteda Initiative CIC was founded to support the text analysts community
@@ -52,14 +63,14 @@ require(quanteda)
     - `textmodel_wordfish()` for unsupervised document
     - `textmodel_affinity()` for supervised document scaling 
 - We also have functions optimized for large textual data
-    - `textmodel_nb()` for naive bayes classification
+    - `textmodel_nb()` for naive Bayes classification
     - `textmodel_ca()` for correspondence analysis
     - `textmodel_lsa()` for latent semantic analysis 
 - Other packages works well with Quanteda
     - **topicmodels** or **LDA** for topic classification
     - **LSS** for semi-supervised document scaling
     
-# Examples
+# Overview
 
 ## Preperation
 
@@ -72,24 +83,38 @@ require(quanteda)
 
 corp <- data_corpus_movies
 docvars(corp, "manual") <- factor(docvars(corp, "Sentiment"), c("neg", "pos"))
-
 corp_sent <- corpus_reshape(corp)
 mt_sent <- dfm(corp_sent, remove_punct = TRUE) %>% 
            dfm_trim(min_termfreq = 5) %>% 
            dfm_remove(stopwords("en"), min_nchar = 2)
 mt <- dfm_group(mt_sent, "id2")
 ```
+
 ---
+
+If we are not using **LSS**, the code will be shorter:
+
 ```{r}
-data <- data.frame(manual = docvars(mt, "manual"))
+corp_sent <- corpus_reshape(corp)
+mt <- dfm(corp, remove_punct = TRUE) %>% 
+          dfm_trim(min_termfreq = 5) %>% 
+          dfm_remove(stopwords("en"), min_nchar = 2)
+```
+
+We will save all the manual labels and predictions in `data`.
+
+```{r}
+data <- data.frame(manual = docvars(mt, "manual"),
+                   nb = NA, ws = NA, rf = NA, wf = NA, lss = NA)
 ```
 
 ## Feature selection
 
-You can chooose features to be included in the models manually or automatically. The simplest way is to choose the most frequent ones after removing function words (stopwords).
+You can choose features to be included in the models manually or automatically. The simplest way is to choose the most frequent ones after removing function words (stop words).
 
 ```{r}
 feat <- names(topfeatures(mt, 1000))
+mt <- dfm_select(mt, feat)
 ```
 
 ## Separate trainig and test sets
@@ -98,7 +123,8 @@ Performance of machine learning models have to be trained and tested on differen
 
 ```{r}
 i <- seq(ndoc(mt)) 
-l <- i %in% sample(i, 1500) 
+l <- i %in% sample(i, 1500)
+head(l)
 mt_train <- mt[l,] 
 mt_test <- mt[!l,]
 ```
@@ -113,27 +139,261 @@ mt_test <- mt[!l,]
 
 ```{r}
 accuracy <- function (x) {
-    list(neg_recall =  x[1,1] / sum(x[1,]),
-         neg_precision = x[1,1] / sum(x[,1]),
-         pos_recall = x[2,2] / sum(x[2,]),
-         pos_precision = x[2,2] / sum(x[,2])
+    c(neg_recall =  x[1,1] / sum(x[1,]),
+      neg_precision = x[1,1] / sum(x[,1]),
+      pos_recall = x[2,2] / sum(x[2,]),
+      pos_precision = x[2,2] / sum(x[,2])
     )
 }
 ```
 
-## Naive Bayes 
+You can also use `caret::confusionMatrix()` for more accuracy measures.
+
+## Naive Bayes
+
+Naive Bayes is a supervised model for document classification (two more more classes). The model is "naive" because words are treated as independent.
 
 ```{r}
-nb <- dfm_select(mt_train, feat) %>% 
-    textmodel_nb(docvars(mt_train, "manual"))
+nb <- textmodel_nb(mt_train, docvars(mt_train, "manual"))
+data$nb[!l] <- predict(nb, newdata = mt_test) # since v1.2.2
+#data$nb[!l] <- predict(nb, newdata = mt_test)$nb.predicted # until v1.2.0
+head(data$nb, 20)
+```
 
-data$nb <- NA
-#data$nb[!l] <- predict(nb, newdata = mt_test) # should like this
-data$nb[!l] <- predict(nb, newdata = dfm_select(mt_test, mt_train))$nb.predicted # should like this
+---
 
+```{r fig.height=3, fig.width=3}
 tb_nb <- table(data$manual, data$nb, dnn = c("manual", "nb"))
 tb_nb
-mosaicplot(tb_nb)
+tb_nb / rowSums(tb_nb)
 accuracy(tb_nb)
 ```
 
+## Wordscores
+
+Wordscores is a supervised model for document scaling (continuous dimension), but we dichotomize the predicted scores to compare with classification models.
+
+```{r}
+ws <- textmodel_wordscores(mt_train, as.numeric(docvars(mt_train, "manual")))
+data$ws[!l] <- predict(ws, newdata = mt_test)
+head(data$ws, 20)
+```
+
+---
+
+```{r}
+plot(data$manual, data$ws)
+```
+
+---
+
+```{r}
+tb_ws <- table(data$manual, data$ws > 1.5)
+tb_ws
+tb_ws / rowSums(tb_ws)
+accuracy(tb_ws)
+```
+
+## Random Forest
+
+Random forest is a rule-based supervised model that can be used for both scaling and classification. It is "random" because it combines multiple decision trees to improve its prediction accuracy. 
+
+```{r ,cache=TRUE}
+# install.packages("randomForest")
+require(randomForest)
+rf <- randomForest(as.matrix(mt_train), docvars(mt_train, "manual"))
+data$rf[!l] <- predict(rf, mt_test)
+head(data$rf, 20)
+```
+
+---
+
+```{r}
+tb_rf <- table(data$manual, data$rf, dnn = c("manual", "rf"))
+tb_rf / rowSums(tb_rf)
+tb_rf
+accuracy(tb_rf)
+```
+
+## Wordfish
+
+Wordfish is a unsupervised document scaling model that compute parameters for both features (theta) and documents (beta).
+
+```{r}
+wf <- textmodel_wordfish(mt)
+data$wf <- wf$theta
+head(data$wf, 20)
+```
+
+---
+
+Wordfish parameters are normalized but have random direction.
+
+```{r echo=FALSE}
+plot(data$manual, data$wf)
+```
+
+---
+
+```{r}
+tb_wf <- table(data$manual, data$wf < 0)
+tb_wf
+tb_wf / rowSums(tb_wf)
+accuracy(tb_wf)
+```
+
+---
+
+```{r}
+head(coef(wf, "features")[,"beta"], 20)
+```
+
+---
+
+```{r}
+tail(coef(wf, "features")[,"beta"], 20)
+```
+
+## Latent Semantic Scaling
+
+LSS is a semi-supervised document scaling model that combines Latent Semantic Analysis and Wordscores.
+
+```{r}
+# devtools::install_github("koheiw/LSS")
+require(LSS)
+lss <- textmodel_lss(mt_sent, seedwords("pos-neg"), feat, cache = TRUE)
+data$lss <- predict(lss, newdata = mt)
+tb_lss <- table(data$manual, data$lss > 0)
+head(data$lss, 20)
+```
+
+---
+
+```{r}
+seedwords("pos-neg")
+```
+
+---
+
+LSS parameters are normalized and have direction specified by the seed words.
+
+```{r}
+plot(data$manual, data$lss)
+```
+
+---
+
+```{r}
+tb_lss
+tb_lss / rowSums(tb_lss)
+accuracy(tb_lss)
+```
+
+---
+
+```{r}
+head(coef(lss), 20)
+```
+
+---
+
+```{r}
+tail(coef(lss), 20)
+```
+
+## Comparison
+
+Supervised models (Naive Bayes, Random Forest, Wordscores) performed well, but the Wordfish did not. LSS is somewhere in between.
+
+```{r echo=FALSE}
+accu_all <- rbind(nb = accuracy(tb_nb), ws = accuracy(tb_ws),
+                  rf = accuracy(tb_rf), wf = accuracy(tb_wf), 
+                  lss = accuracy(tb_lss))
+matplot(accu_all, type = "b", ylab = "Precision/recall", xaxt = "n", pch = 1)
+axis(1, 1:5, rownames(accu_all))
+legend("bottomleft", col = 1:4, colnames(accu_all), lty = 1, pch = 1)
+```
+
+# Experiment
+
+## How big training set should be?
+
+Train NB on corpora in different sizes (100 to 1000 documents) to see the changes in classification accuracy.
+
+```{r, cache=TRUE}
+l2 <- i %in% sample(i, 1000)
+mt_test2 <- mt[!l2,]
+
+data2 <- data.frame()
+for (n in seq(100, 1000, by = 100)) {
+    for (m in seq(1:20)) {
+        mt_train2 <- mt[sample(i[l2], n),]
+        nb <- textmodel_nb(mt_train2, docvars(mt_train2, "manual"))
+        docvars(mt_test2, "nb") <- predict(nb, newdata = mt_test2) # since v1.2.2
+        #docvars(mt_test2, "nb") <- predict(nb, newdata = mt_test2)$nb.predicted # until v1.2.0
+        tb_temp <- table(docvars(mt_test2, "manual"), docvars(mt_test2, "nb"))
+        temp <- as.data.frame(rbind(accuracy(tb_temp)))
+        temp$size <- n
+        data2 <- rbind(data2, temp)
+    }
+}
+```
+
+---
+
+Training set should have 500 or more documents to reach high performance.
+
+```{r echo=FALSE, fig.height=5.5, fig.width=10}
+require(gplots)
+par(mfrow = c(2, 2), mar = c(4, 4, 1, 1))
+plotmeans(neg_precision ~ size, data2, ylim = c(0.65, 0.8), n.label = FALSE)
+plotmeans(neg_recall ~ size, data2, ylim = c(0.65, 0.8), n.label = FALSE)
+plotmeans(pos_precision ~ size, data2, ylim = c(0.65, 0.8), n.label = FALSE)
+plotmeans(pos_recall ~ size, data2, ylim = c(0.65, 0.8), n.label = FALSE)
+par(mfrow = c(1, 1))
+```
+
+---
+
+It suggests that we have to see the least frequent words in at least 10 to 30 documents. 
+
+```{r}
+feat_rare <- tail(feat, 10)
+feat_rare
+docfreq(mt_train2)[feat_rare] * (500 /  ndoc(mt_train2))
+```
+
+## Distribution of features
+
+Word frequency follows long-tail distribution (Zepf's law), so low rank words are very rare.
+
+```{r, echo=FALSE}
+    plot(topfeatures(mt_train2, 1000), type = "b", 
+         ylab = "Frequency of top features", 
+         xlab = "Feature ranks")
+```
+
+---
+
+The movie review corpus is actually not very sparse (sparsity could be even higher). 
+
+```{r}
+sparsity(dfm(corp, remove_punct = TRUE))
+```
+
+## Conclusions
+
+Machine learning models are easy to use for text analysis using **quanteda**, but you have be aware of the costs.
+
+- Supervised models require large training set, especially when 
+    - corpus is sparse (e.g. news articles)
+    - category/dimension is specific (e.g. social scientific concepts)
+    - model is complex (e.g. neural network)
+- Wordfish often produces random results, especially when
+    - corpus is sparse
+    - documents are mix different topics
+- LSS is free of these problems, but 
+    - individual prediction is not very accurate
+    - requires valid seed words and a very large corpus (> 5000 documents)
+    
+    
