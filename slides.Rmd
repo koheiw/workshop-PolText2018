@@ -1,5 +1,5 @@
 ---
-title: "Introduction Machine Learning in Text Analysis"
+title: "Introduction to Machine Learning for Text Analysis"
 author: "Kohei Watanabe (LSE, Waseda)"
 date: "9 May 2018"
 output: 
