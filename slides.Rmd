@@ -1,5 +1,5 @@
 ---
-title: "Introduction to Text Analysis using Machine Learning"
+title: "Introduction Machine Learning in Text Analysis"
 author: "Kohei Watanabe (LSE, Waseda)"
 date: "9 May 2018"
 output: 
@@ -95,7 +95,6 @@ mt <- dfm_group(mt_sent, "id2")
 If we are not using **LSS**, the code will be shorter:
 
 ```{r}
-corp_sent <- corpus_reshape(corp)
 mt <- dfm(corp, remove_punct = TRUE) %>% 
           dfm_trim(min_termfreq = 5) %>% 
           dfm_remove(stopwords("en"), min_nchar = 2)
@@ -391,7 +390,7 @@ Machine learning models are easy to use for text analysis using **quanteda**, bu
     - model is complex (e.g. neural network)
 - Wordfish often produces random results, especially when
     - corpus is sparse
-    - documents are mix different topics
+    - documents mix different topics
 - LSS is free of these problems, but 
     - individual prediction is not very accurate
     - requires valid seed words and a very large corpus (> 5000 documents)
