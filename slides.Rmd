@@ -87,7 +87,7 @@ corp_sent <- corpus_reshape(corp)
 mt_sent <- dfm(corp_sent, remove_punct = TRUE) %>% 
            dfm_trim(min_termfreq = 5) %>% 
            dfm_remove(stopwords("en"), min_nchar = 2)
-mt <- dfm_group(mt_sent, "id2")
+mt_full <- dfm_group(mt_sent, "id2")
 ```
 
 ---
@@ -95,7 +95,7 @@ mt <- dfm_group(mt_sent, "id2")
 If we are not using **LSS**, the code will be shorter:
 
 ```{r}
-mt <- dfm(corp, remove_punct = TRUE) %>% 
+mt_full <- dfm(corp, remove_punct = TRUE) %>% 
           dfm_trim(min_termfreq = 5) %>% 
           dfm_remove(stopwords("en"), min_nchar = 2)
 ```
@@ -112,8 +112,8 @@ data <- data.frame(manual = docvars(mt, "manual"),
 You can choose features to be included in the models manually or automatically. The simplest way is to choose the most frequent ones after removing function words (stop words).
 
 ```{r}
-feat <- names(topfeatures(mt, 1000))
-mt <- dfm_select(mt, feat)
+feat <- names(topfeatures(mt_full, 1000))
+mt <- dfm_select(mt_full, feat)
 ```
 
 ## Separate trainig and test sets
@@ -328,8 +328,7 @@ for (n in seq(100, 1000, by = 100)) {
     for (m in seq(1:20)) {
         mt_train2 <- mt[sample(i[l2], n),]
         nb <- textmodel_nb(mt_train2, docvars(mt_train2, "manual"))
-        docvars(mt_test2, "nb") <- predict(nb, newdata = mt_test2) # since v1.2.2
-        #docvars(mt_test2, "nb") <- predict(nb, newdata = mt_test2)$nb.predicted # until v1.2.0
+        docvars(mt_test2, "nb") <- predict(nb, newdata = mt_test2)
         tb_temp <- table(docvars(mt_test2, "manual"), docvars(mt_test2, "nb"))
         temp <- as.data.frame(rbind(accuracy(tb_temp)))
         temp$size <- n
@@ -351,6 +350,40 @@ plotmeans(pos_precision ~ size, data2, ylim = c(0.65, 0.8), n.label = FALSE)
 plotmeans(pos_recall ~ size, data2, ylim = c(0.65, 0.8), n.label = FALSE)
 par(mfrow = c(1, 1))
 ```
+---
+
+```{r, cache=TRUE}
+lmt <- as.dfm(textmodel_lsa(mt_full, nd = 300, margin = "features"))
+docvars(lmt) <- docvars(mt_full)
+lmt_test <- lmt[!l2,]
+
+data3 <- data.frame()
+for (n in seq(100, 1000, by = 100)) {
+    for (m in seq(1:20)) {
+        lmt_train <- lmt[sample(i[l2], n),]
+        nb <- textmodel_nb(lmt_train, docvars(lmt_train, "manual"))
+        docvars(lmt_test, "nb") <- predict(nb, newdata = lmt_test)
+        tb_temp <- table(docvars(lmt_test, "manual"), docvars(lmt_test, "nb"))
+        temp <- as.data.frame(rbind(accuracy(tb_temp)))
+        temp$size <- n
+        data3 <- rbind(data3, temp)
+    }
+}
+```
+
+
+---
+
+```{r echo=FALSE, fig.height=5.5, fig.width=10}
+require(gplots)
+par(mfrow = c(2, 2), mar = c(4, 4, 1, 1))
+plotmeans(neg_precision ~ size, data3, ylim = c(0.65, 0.8), n.label = FALSE)
+plotmeans(neg_recall ~ size, dat3, ylim = c(0.65, 0.8), n.label = FALSE)
+plotmeans(pos_precision ~ size, data3, ylim = c(0.65, 0.8), n.label = FALSE)
+plotmeans(pos_recall ~ size, data3, ylim = c(0.65, 0.8), n.label = FALSE)
+par(mfrow = c(1, 1))
+```
+---
 
 ---
 
