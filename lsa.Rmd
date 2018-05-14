@@ -1,0 +1,101 @@
+---
+title: "Introduction to Machine Learning for Text Analysis"
+author: "Kohei Watanabe (LSE, Waseda)"
+date: "14 May 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE,
+	cache = TRUE
+)
+require(quanteda)
+require(quanteda.corpora)
+require(randomForest)
+```
+
+```{r}
+corp <- data_corpus_movies
+docvars(corp, "manual") <- factor(docvars(corp, "Sentiment"), c("neg", "pos"))
+
+mt_full <- dfm(corp, remove_punct = TRUE) %>% 
+           dfm_trim(min_termfreq = 5) %>% 
+           dfm_remove(stopwords("en"), min_nchar = 2)
+
+feat <- names(topfeatures(mt_full, 1000))
+mt <- dfm_select(mt_full, feat)
+```
+
+```{r}
+accuracy <- function (x) {
+    c(neg_recall =  x[1,1] / sum(x[1,]),
+      neg_precision = x[1,1] / sum(x[,1]),
+      pos_recall = x[2,2] / sum(x[2,]),
+      pos_precision = x[2,2] / sum(x[,2])
+    )
+}
+```
+
+
+```{r}
+i <- seq(ndoc(mt)) 
+l <- i %in% sample(i, 1000)
+mt_test <- mt[!l,]
+```
+
+---
+
+```{r, cache=TRUE}
+mt_test <- mt[!l,]
+
+data3 <- data.frame()
+for (n in seq(100, 1000, by = 100)) {
+    for (m in seq(20)) {
+        mt_temp <- mt[sample(i[l], n),]
+        rf <- randomForest(as.matrix(mt_temp), docvars(mt_temp, "manual"))
+        docvars(mt_test, "rf") <- predict(rf, newdata = mt_test)
+        tb_temp <- table(docvars(mt_test, "manual"), docvars(mt_test, "rf"))
+        temp <- as.data.frame(rbind(accuracy(tb_temp)))
+        temp$size <- n
+        data3 <- rbind(data3, temp)
+    }
+}
+```
+
+```{r, cache=TRUE}
+lmt <- as.dfm(textmodel_lsa(mt_full, nd = 300, margin = "feature"))
+docvars(lmt) <- docvars(mt_full)
+lmt_test <- lmt[!l,]
+
+data4 <- data.frame()
+for (n in seq(100, 1000, by = 100)) {
+    for (m in seq(20)) {
+        lmt_train <- lmt[sample(i[l], n),]
+        lrf <- randomForest(as.matrix(lmt_train), docvars(lmt_train, "manual"))
+        docvars(lmt_test, "rf") <- predict(lrf, newdata = lmt_test)
+        tb_temp <- table(docvars(lmt_test, "manual"), docvars(lmt_test, "rf"))
+        temp <- as.data.frame(rbind(accuracy(tb_temp)))
+        temp$size <- n
+        data4 <- rbind(data4, temp)
+    }
+}
+```
+
+---
+
+```{r echo=FALSE, fig.height=5.5, fig.width=10}
+require(gplots)
+par(mfrow = c(2, 2), mar = c(4, 4, 1, 1))
+plotmeans(neg_precision ~ size, data3, ylim = c(0.5, 0.9), n.label = FALSE)
+plotmeans(neg_precision ~ size, data4, ylim = c(0.5, 0.9), n.label = FALSE, lty = 3, add = TRUE)
+plotmeans(neg_recall ~ size, data3, ylim = c(0.5, 0.9), n.label = FALSE)
+plotmeans(neg_recall ~ size, data4, ylim = c(0.5, 0.9), n.label = FALSE, lty = 3, add = TRUE)
+plotmeans(pos_precision ~ size, data3, ylim = c(0.5, 0.9), n.label = FALSE)
+plotmeans(pos_precision ~ size, data4, ylim = c(0.5, 0.9), n.label = FALSE, lty = 3, add = TRUE)
+plotmeans(pos_recall ~ size, data3, ylim = c(0.5, 0.9), n.label = FALSE)
+plotmeans(pos_recall ~ size, data4, ylim = c(0.5, 0.9), n.label = FALSE, lty = 3, add = TRUE)
+par(mfrow = c(1, 1))
+```
