@@ -103,7 +103,7 @@ mt_full <- dfm(corp, remove_punct = TRUE) %>%
 We will save all the manual labels and predictions in `data`.
 
 ```{r}
-data <- data.frame(manual = docvars(mt, "manual"),
+data <- data.frame(manual = docvars(mt_full, "manual"),
                    nb = NA, ws = NA, rf = NA, wf = NA, lss = NA)
 ```
 
@@ -350,40 +350,6 @@ plotmeans(pos_precision ~ size, data2, ylim = c(0.65, 0.8), n.label = FALSE)
 plotmeans(pos_recall ~ size, data2, ylim = c(0.65, 0.8), n.label = FALSE)
 par(mfrow = c(1, 1))
 ```
----
-
-```{r, cache=TRUE}
-lmt <- as.dfm(textmodel_lsa(mt_full, nd = 300, margin = "features"))
-docvars(lmt) <- docvars(mt_full)
-lmt_test <- lmt[!l2,]
-
-data3 <- data.frame()
-for (n in seq(100, 1000, by = 100)) {
-    for (m in seq(1:20)) {
-        lmt_train <- lmt[sample(i[l2], n),]
-        nb <- textmodel_nb(lmt_train, docvars(lmt_train, "manual"))
-        docvars(lmt_test, "nb") <- predict(nb, newdata = lmt_test)
-        tb_temp <- table(docvars(lmt_test, "manual"), docvars(lmt_test, "nb"))
-        temp <- as.data.frame(rbind(accuracy(tb_temp)))
-        temp$size <- n
-        data3 <- rbind(data3, temp)
-    }
-}
-```
-
-
----
-
-```{r echo=FALSE, fig.height=5.5, fig.width=10}
-require(gplots)
-par(mfrow = c(2, 2), mar = c(4, 4, 1, 1))
-plotmeans(neg_precision ~ size, data3, ylim = c(0.65, 0.8), n.label = FALSE)
-plotmeans(neg_recall ~ size, dat3, ylim = c(0.65, 0.8), n.label = FALSE)
-plotmeans(pos_precision ~ size, data3, ylim = c(0.65, 0.8), n.label = FALSE)
-plotmeans(pos_recall ~ size, data3, ylim = c(0.65, 0.8), n.label = FALSE)
-par(mfrow = c(1, 1))
-```
----
 
 ---
 
